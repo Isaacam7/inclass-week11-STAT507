@@ -9,20 +9,14 @@
 
 library(shiny)
 library(glue)
-library(ggplot2)
+library(tidyverse)
 
 # Define server logic required to draw a histogram
 function(input, output, session) {
-
   
+  # use srs <- reactive({}) to make sure all renders use the same values
   
-  # output$distPlot <- renderPlot({
-  #   
-  # })
-  
-  output$summary_text <- renderText({
-    
-    set.seed(507)
+  srs <- reactive({
     
     
     len  <- as.numeric(isolate(input$nobs))
@@ -31,7 +25,7 @@ function(input, output, session) {
     input$update
     
     pois.srs <- rpois(n=len,
-                       lambda=lambda)
+                      lambda=lambda)
     
     norm1.srs <- rnorm(n=len,
                        mean=lambda,
@@ -43,10 +37,50 @@ function(input, output, session) {
     
     transformed.srs <- sqrt(pois.srs)
     
-    glue(paste("Sample mean from a","SRS from a Poisson distribution:",mean(pois.srs),"\n",
-          "Sample mean from a","SRS from a Normal distribution with inputed mean and sd sqrt of mean:",mean(norm1.srs),"\n",
-          "Sample mean from a","SRS from a Normal distribution with sqrt inputed mean and sd 1/4:",mean(norm2.srs),"\n",
-          "Sample mean from a","transformed (sqrt of pois) SRS:",mean(transformed.srs),"\n"))
+    list(pois.srs=pois.srs,
+         norm1.srs=norm1.srs,
+         norm2.srs=norm2.srs,
+         transformed.srs=transformed.srs)
+  })
+  
+  
+  
+  output$summary_text <- renderText({
+    
+    srs.vals <- srs()
+    glue(paste("Sample mean from a","SRS from a Poisson distribution:",mean(srs.vals$pois.srs),"\n",
+          "Sample mean from a","SRS from a Normal distribution with inputed mean and sd sqrt of mean:",mean(srs.vals$norm1.srs),"\n",
+          "Sample mean from a","SRS from a Normal distribution with sqrt inputed mean and sd 1/4:",mean(srs.vals$norm2.srs),"\n",
+          "Sample mean from a","transformed (sqrt of pois) SRS:",mean(srs.vals$transformed.srs),"\n"))
+    
+  })
+  
+  output$distPlot <- renderPlot({
+    
+    srs.vals <- srs()
+    
+     data.frame(pois = srs.vals$pois.srs,
+                      norm1 = srs.vals$norm1.srs,
+                      norm2 = srs.vals$norm2.srs,
+                      transformed = srs.vals$transformed.srs) %>%
+       
+       pivot_longer(everything(),
+                    names_to = "dist",
+                    values_to = "value") %>%
+       mutate(espected_mean = case_match(dist,
+                                         'pois' ~ 'lambda',
+                                         'norm1' ~ 'lambda',
+                                         'norm2' ~ 'sqrt lambda',
+                                         'transformed' ~ 'sqrt lambda'
+         
+       )) %>% 
+       ggplot(aes(x=value)) +
+       geom_histogram(aes(fill=dist),
+                      alpha=0.5,
+                      position = position_identity()) +
+       facet_grid(cols = vars(espected_mean))
+    
+    
     
   })
   
